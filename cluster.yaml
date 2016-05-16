@@ -1,0 +1,77 @@
+heat_template_version: 2013-05-23
+
+description: Template that installs a cluster of servers with a load balancer.
+
+parameters:
+  image:
+    type: string
+    label: Image name or ID
+    description: Image to be used for server. Please use an Ubuntu based image.
+    default: cirros
+  flavor:
+    type: string
+    label: Flavor
+    description: Type of instance (flavor) to be used on the compute instance.
+    default: m1.small
+  key:
+    type: string
+    label: Key name
+    description: Name of key-pair to be installed on the compute instance.
+    default: overcloud
+  public_network:
+    type: string
+    label: Public network name or ID
+    description: Public network to attach server to.
+    default: cluster-test
+  cluster_size:
+    type: number
+    label: Cluster size
+    description: Number of instances in cluster.
+    default: 3
+  port_number:
+    type: number
+    label: Port number
+    description: Port number to proxy.
+    default: 22
+
+resources:
+  uuid:
+    type: OS::Heat::RandomString
+    properties:
+      length: 4
+
+  security_group:
+      type: OS::Neutron::SecurityGroup
+      properties:
+        name: { "Fn::Join": [ '-', [ 'cluster-sec', { get_resource: uuid } ]] }
+        rules:
+          - protocol: icmp
+          - protocol: tcp
+            port_range_min: { get_param: port_number }
+            port_range_max: { get_param: port_number }
+
+  network:
+    type: Lib::MSG::PrivateNetwork
+    properties:
+      public_network: { get_param: public_network }
+      suffix: { get_resource: uuid }
+
+  cluster:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: { get_param: cluster_size }
+      resource_def:
+        type: Lib::MSG::Node
+        properties:
+          name: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }, '%index%' ]] }
+          image: { get_param: image }
+          flavor: { get_param: flavor }
+          key: { get_param: key }
+          private_network: { get_attr: [network, name] }
+          public_network: { get_param: public_network }
+          security_group: { get_resource: security_group }
+
+outputs:
+  ip:
+    description: The public IP address to access the server.
+    value: { get_attr: [cluster, public_ip] }
