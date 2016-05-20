@@ -1,0 +1,139 @@
+heat_template_version: 2013-05-23
+
+description: Template that installs a small example web server.
+
+parameters:
+  name:
+    type: string
+    label: Cluster node name
+    description: Name of the cluster node
+    default: node
+  offset:
+    type: number
+    label: Cluster node offset
+    description: Cluster node offset
+    default: 0
+  image:
+    type: string
+    label: Image name or ID
+    description: Image to be used for server. Please use an Ubuntu based image.
+    default: trusty-server-cloudimg-amd64
+  flavor:
+    type: string
+    label: Flavor
+    description: Type of instance (flavor) to be used on the compute instance.
+    default: m1.small
+  key:
+    type: string
+    label: Key name
+    description: Name of key-pair to be installed on the compute instance.
+    default: default
+  public_network:
+    type: string
+    label: Private network name or ID
+    description: Network to attach server to.
+    default: private
+  private_network:
+    type: string
+    label: Private network name or ID
+    description: Network to attach server to.
+    default: private
+  security_group:
+    type: string
+    description: Public network security group
+
+resources:
+  signal_handle:
+    type: "OS::Heat::SwiftSignalHandle"
+
+  wait_on_server:
+    type: OS::Heat::SwiftSignal
+    properties:
+      handle: {get_resource: signal_handle}
+      count: 1
+      timeout: 3300
+
+  floating_ip:
+    type: floating_ip.yaml
+    properties:
+      public_network: { get_param: public_network }
+      private_network: { get_param: private_network }
+      security_group: { get_param: security_group }
+
+  cluster_instance:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: name }
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key }
+      networks:
+        - port: { get_attr: [floating_ip, port] }
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          params:
+            # Replace all occurances of "wc_notify" in the script with an
+            # appropriate curl PUT request using the "curl_cli" attribute
+            # of the SwiftSignalHandle resource
+            wc_notify:   { get_attr: ['signal_handle', 'curl_cli'] }
+          template: |
+            #!/bin/sh -ex
+
+            /usr/bin/logger "cluster prep: begin"
+
+            # Switch to CentOS so we can install some packages 
+            rm -rf /usr/share/doc/redhat-release
+            rm -rf /usr/share/redhat-release
+            rpm -Uvh --force http://mirror.centos.org/centos/7/os/x86_64/Packages/centos-release-7-2.1511.el7.centos.2.10.x86_64.rpm
+
+            # Notify success early during development phase
+            wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
+                
+            # Sync and install the packages
+            yum --releasever=7 distro-sync -y
+            yum install -y pcs pacemaker corosync fence-agents-all resource-agents ntp
+            
+            # enable pcsd
+            systemctl enable pcsd
+            systemctl start pcsd
+            
+            #systemctl disable firewalld
+            #systemctl stop firewalld
+            
+            # The cluster shouldn't need NTP configured, but without it the
+            # network goes bye-bye when using DHCP
+            #
+            # Must point to clock.redhat.com to work internally
+            sed -i s/^server.*// /etc/ntp.conf
+            echo "server pool.ntp.org iburst" >> /etc/ntp.conf
+            echo pool.ntp.org > /etc/ntp/step-tickers
+            
+            #sync_to_hardware clock
+            echo "SYNC_HWCLOCK=yes" >> /etc/sysconfig/ntpdate
+            
+            systemctl enable ntpdate
+            systemctl start ntpdate
+            
+            systemctl enable ntpd
+            systemctl start ntpd
+            
+            /usr/bin/logger "cluster prep: done"
+
+            # Assuming long running operation completed successfully, notify success signal
+            wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
+  
+            # Alternatively if operation fails a FAILURE with reason and data may be sent,
+            # notify failure signal example below
+            # wc_notify --data-binary '{"status": "FAILURE", "reason":"Operation failed due to xyz error", "data":"Script execution failed"}'
+
+outputs:
+  name:
+    description: Name of the tiny instance.
+    value: { get_attr: [cluster_instance, name] }
+  ip:
+    description: The IP address of the tiny instance.
+    value: { get_attr: [cluster_instance, first_address] }
+  public_ip:
+    description: The public IP address of the tiny instance.
+    value: { get_attr: [floating_ip, ip] }
