@@ -95,8 +95,9 @@ resources:
         cluster_size: { get_param: cluster_size }
         prefix: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }]] }
         servers: { get_attr: [cluster, ip] }
+        server_names: { get_attr: [cluster, name] }
 
 outputs:
   ip:
     description: The public IP address to access the server.
-    value: { get_attr: [cluster, public_ip] }
+    value: { get_attr: [management, public_ip] }

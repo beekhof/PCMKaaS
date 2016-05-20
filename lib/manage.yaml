@@ -22,6 +22,10 @@ parameters:
     type: comma_delimited_list
     label: Servers
     description: Comma separated list of private IPs in the cluster.
+  server_names:
+    type: comma_delimited_list
+    label: Servers
+    description: Comma separated list of cluster server names.
   image:
     type: string
     label: Image name or ID
@@ -35,7 +39,12 @@ parameters:
   key:
     type: string
     label: Key name
-    description: Name of key-pair to be installed on the compute instance.
+    description: Name of key-pair to be installed on the management instance.
+    default: default
+  cluster_key:
+    type: string
+    label: Key name
+    description: Name of key-pair to for accessing cluster instances.
     default: default
   public_network:
     type: string
@@ -78,6 +87,7 @@ resources:
       key_name: { get_param: key }
       metadata:
         servers: { get_param: servers }
+        server_names: { get_param: server_names }
       networks:
         - port: { get_attr: [floating_ip, port] }
       user_data_format: RAW
@@ -91,14 +101,22 @@ resources:
             __pass__:    { get_param: prefix }
             __prefix__:  { get_param: prefix }
             __count__:   { get_param: cluster_size }
-            __store__:   '/usr/share/'
+            __key__:     { get_param: cluster_key }
+            __store__:   '/usr/share/pacemaker'
           template: |
-            #!/bin/sh -ex
+            #!/bin/bash -ex
 
-            /usr/bin/logger "beekhof: success"
+            /usr/bin/logger "prep: begin __key__"
 
-            # write the update script
-            cat >>__store__/update_servers.py <<EOF
+            # Save the private key for accessing the cluster
+            mkdir /root/.ssh
+            echo "__key__" > /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+
+            ls -alR /home
+
+            # Write and call the update script
+            cat >>__store__/update.py <<EOF
             import sys
             import json
             import subprocess
@@ -118,20 +136,57 @@ resources:
             # record updated list of servers
             open(sfile, 'wt').write(json.dumps(new_servers))
             
-            # generate a new config file
-            f = open('__store__/servers.list', 'wt')
+            # Re-create /etc/hosts
+            f = open('/etc/hosts', 'wt')
+            f.write('127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4')
+            f.write('::1         localhost localhost.localdomain localhost6 localhost6.localdomain6')
             for i, server in enumerate(new_servers):
-                f.write('    server server-{0} {1}:{2}\n'.format(i, server, __port__))
+                f.write('{0} __prefix__-{1} __prefix__-{1}.localdomain\n'.format(server,i,i))
+            f.close()
+            f = open('__store__/nodelist.pcs', 'wt')
+            for i, server in enumerate(new_servers):
+                f.write('__prefix__-{0}@{1}'.format(i,server))
             f.close()
             EOF
-            
-            short_nodes=""
-            offset=0
-            while [ $offset -lt __count__ ]; do
-                short_nodes="${short_nodes} $(echo __prefix__-${offset})"
-                offset=$(expr $offset + 1)
+
+            echo "[]" > __store__/servers.json
+            curl -s http://169.254.169.254/openstack/latest/meta_data.json | python __store__/update.py
+
+            # add a cron job to monitor the metadata and update /etc/hosts
+            #crontab -l >_crontab || true
+            #echo "* * * * * curl -s http://169.254.169.254/openstack/latest/meta_data.json | python __store__/update.py | /usr/bin/logger -t pcs_update" >>_crontab
+            #crontab <_crontab
+            #rm _crontab
+
+            # Sync the hosts file
+            for IP in ${node_names}; do
+                scp /etc/hosts cloud-user@${IP}:
+                ssh -t cloud-user@${IP} -- sudo cp ./hosts /etc/hosts
             done
-            echo $short_nodes
+
+            # Potentially, if we ever support dynamic resizing, the short name may not be stable enough
+            # and we'll have to use IPs to create/update the cluster instead
+            node_names=$(cat /etc/hosts | grep __prefix__ | awk '{print $3}' | tr '\n' ' ' )
+            node_ips=$(cat /etc/hosts | grep __prefix__ | awk '{print $1}' | tr '\n' ' ' )
+
+            # Switch to CentOS so we can install some packages 
+            rm -rf /usr/share/doc/redhat-release
+            rm -rf /usr/share/redhat-release
+            rpm -Uvh --force http://mirror.centos.org/centos/7/os/x86_64/Packages/centos-release-7-2.1511.el7.centos.2.10.x86_64.rpm
+
+            # Notify success early during development phase
+            wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
+
+            # Sync and install the packages
+            yum --releasever=7 distro-sync -y
+            yum install -y pcs pacemaker corosync fence-agents-all resource-agents ntp
+
+            # autheticate nodes, requires all nodes to have pcsd up and running 
+            # the -p option is used to give the password on command line and make it easier to script
+            pcs cluster auth $node_names -u hacluster -p __pass__
+            
+            # Construct and start the cluster
+            pcs cluster setup --start --enable --name __prefix__  ${node_names}
 
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
@@ -143,10 +198,10 @@ resources:
 outputs:
   name:
     description: Name of the tiny instance.
-    value: { get_attr: [cluster_instance, name] }
+    value: { get_attr: [management_node, name] }
   ip:
     description: The IP address of the tiny instance.
-    value: { get_attr: [cluster_instance, first_address] }
+    value: { get_attr: [management_node, first_address] }
   public_ip:
     description: The public IP address of the tiny instance.
     value: { get_attr: [floating_ip, ip] }
