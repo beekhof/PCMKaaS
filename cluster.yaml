@@ -7,7 +7,7 @@ parameters:
     type: string
     label: Image name or ID
     description: Image to be used for server. Please use an Ubuntu based image.
-    default: cirros
+    default: RHEL72
   flavor:
     type: string
     label: Flavor
@@ -50,8 +50,8 @@ resources:
             port_range_min: { get_param: port_number }
             port_range_max: { get_param: port_number }
 
-  network:
-    type: Lib::MSG::PrivateNetwork
+  private_network:
+    type: lib/private_network.yaml
     properties:
       public_network: { get_param: public_network }
       suffix: { get_resource: uuid }
@@ -61,15 +61,28 @@ resources:
     properties:
       count: { get_param: cluster_size }
       resource_def:
-        type: Lib::MSG::Node
+        type: lib/node.yaml
         properties:
           name: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }, '%index%' ]] }
           image: { get_param: image }
           flavor: { get_param: flavor }
           key: { get_param: key }
-          private_network: { get_attr: [network, name] }
+          private_network: { get_attr: [private_network, name] }
           public_network: { get_param: public_network }
           security_group: { get_resource: security_group }
+
+  management:
+      type: lib/manage.yaml
+      properties:
+        image: { get_param: image }
+        flavor: { get_param: flavor }
+        key: { get_param: key }
+        private_network: { get_attr: [private_network, name] }
+        public_network: { get_param: public_network }
+        security_group: { get_resource: security_group }
+        cluster_size: { get_param: cluster_size }
+        prefix: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }]] }
+        servers: { get_attr: [cluster, ip] }
 
 outputs:
   ip:
