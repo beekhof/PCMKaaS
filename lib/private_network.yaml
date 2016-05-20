@@ -43,7 +43,7 @@ resources:
     type: OS::Neutron::Subnet
     properties:
       network: { get_resource: private_network }
-      cidr: { "Fn::Join": [ '.', [ '10', { get_attr: [octone, value] }, { get_attr: [octtwo, value] }, '0/24' ]] }
+      cidr: { "Fn::Join": [ "", [ '10.1', { get_attr: [octone, value] }, '.1', { get_attr: [octtwo, value] }, '.0/24' ]] }
       dns_nameservers: { get_param: dns }
       name: { "Fn::Join": [ '-', [ 'private-subnet', { get_param: suffix } ]] }
 
