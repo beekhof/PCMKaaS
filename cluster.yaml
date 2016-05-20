@@ -40,15 +40,20 @@ resources:
     properties:
       length: 4
 
+  cluster_key:
+    type: lib/keypair.yaml
+    properties:
+      prefix: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid } ]] }
+
   security_group:
-      type: OS::Neutron::SecurityGroup
-      properties:
-        name: { "Fn::Join": [ '-', [ 'cluster-sec', { get_resource: uuid } ]] }
-        rules:
-          - protocol: icmp
-          - protocol: tcp
-            port_range_min: { get_param: port_number }
-            port_range_max: { get_param: port_number }
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: { "Fn::Join": [ '-', [ 'cluster-sec', { get_resource: uuid } ]] }
+      rules:
+        - protocol: icmp
+        - protocol: tcp
+          port_range_min: { get_param: port_number }
+          port_range_max: { get_param: port_number }
 
   private_network:
     type: lib/private_network.yaml
@@ -66,7 +71,7 @@ resources:
           name: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }, '%index%' ]] }
           image: { get_param: image }
           flavor: { get_param: flavor }
-          key: { get_param: key }
+          key: { get_attr: [cluster_key, name] }
           private_network: { get_attr: [private_network, name] }
           public_network: { get_param: public_network }
           security_group: { get_resource: security_group }
@@ -77,6 +82,7 @@ resources:
         image: { get_param: image }
         flavor: { get_param: flavor }
         key: { get_param: key }
+        cluster_key: { get_attr: [cluster_key, private_key] }
         private_network: { get_attr: [private_network, name] }
         public_network: { get_param: public_network }
         security_group: { get_resource: security_group }
