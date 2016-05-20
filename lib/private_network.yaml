@@ -42,7 +42,7 @@ resources:
   private_subnet:
     type: OS::Neutron::Subnet
     properties:
-      network_id: { get_resource: private_network }
+      network: { get_resource: private_network }
       cidr: { "Fn::Join": [ '.', [ '10', { get_attr: [octone, value] }, { get_attr: [octtwo, value] }, '0/24' ]] }
       dns_nameservers: { get_param: dns }
       name: { "Fn::Join": [ '-', [ 'private-subnet', { get_param: suffix } ]] }
