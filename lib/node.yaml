@@ -16,8 +16,7 @@ parameters:
   image:
     type: string
     label: Image name or ID
-    description: Image to be used for server. Please use an Ubuntu based image.
-    default: trusty-server-cloudimg-amd64
+    description: Image to be used for server. Please use an RHEL/CentOS 7 based image for now.
   flavor:
     type: string
     label: Flavor
@@ -94,6 +93,9 @@ resources:
             yum --releasever=7 distro-sync -y
             yum install -y pcs pacemaker corosync fence-agents-all resource-agents ntp
             
+            # set a password for hacluster user. password should be the same on all nodes
+            echo __pass__ | passwd --stdin hacluster
+
             # enable pcsd
             systemctl enable pcsd
             systemctl start pcsd
