@@ -7,7 +7,7 @@ parameters:
     type: string
     label: Image name or ID
     description: Image to be used for server. Please use an RHEL/CentOS 7 based image for now.
-    default: RHEL72
+    default: ha-guest
   flavor:
     type: string
     label: Flavor
@@ -78,6 +78,7 @@ resources:
           image: { get_param: image }
           flavor: { get_param: flavor }
           key: { get_attr: [cluster_key, name] }
+          cluster_pass: { get_resource: uuid }
           private_network: { get_attr: [private_network, name] }
           public_network: { get_param: public_network }
           security_group: { get_resource: security_group }
@@ -89,10 +90,10 @@ resources:
         flavor: { get_param: flavor }
         key: { get_param: key }
         cluster_key: { get_attr: [cluster_key, private_key] }
+        cluster_pass: { get_resource: uuid }
         private_network: { get_attr: [private_network, name] }
         public_network: { get_param: public_network }
         security_group: { get_resource: security_group }
-        cluster_size: { get_param: cluster_size }
         prefix: { "Fn::Join": [ '-', [ 'cluster', { get_resource: uuid }]] }
         servers: { get_attr: [cluster, ip] }
         server_names: { get_attr: [cluster, name] }
