@@ -3,29 +3,6 @@ heat_template_version: 2013-05-23
 description: Template that installs a small example web server.
 
 parameters:
-  prefix:
-    type: string
-    label: Cluster node name
-    description: Stem from which to create a node name
-    default: cluster
-  offset:
-    type: number
-    label: Cluster node number
-    description: Number of this instance in the cluster
-    default: 0
-  cluster_size:
-    type: number
-    label: Cluster size
-    description: Number of instances in cluster.
-    default: 3
-  servers:
-    type: comma_delimited_list
-    label: Servers
-    description: Comma separated list of private IPs in the cluster.
-  server_names:
-    type: comma_delimited_list
-    label: Servers
-    description: Comma separated list of cluster server names.
   image:
     type: string
     label: Image name or ID
@@ -59,6 +36,22 @@ parameters:
   security_group:
     type: string
     description: Public network security group
+  prefix:
+    type: string
+    label: Cluster name
+    description: Stem from which to create a node name
+    default: cluster
+  cluster_pass:
+    type: string
+    label: Cluster password
+  servers:
+    type: comma_delimited_list
+    label: Servers
+    description: Comma separated list of private IPs in the cluster.
+  server_names:
+    type: comma_delimited_list
+    label: Servers
+    description: Comma separated list of cluster server names.
 
 resources:
   signal_handle:
@@ -98,22 +91,22 @@ resources:
             # appropriate curl PUT request using the "curl_cli" attribute
             # of the SwiftSignalHandle resource
             wc_notify:   { get_attr: ['signal_handle', 'curl_cli'] }
-            __pass__:    { get_param: prefix }
+            __pass__:    { get_param: cluster_pass }
             __prefix__:  { get_param: prefix }
-            __count__:   { get_param: cluster_size }
             __key__:     { get_param: cluster_key }
-            __store__:   '/usr/share/pacemaker'
+            __store__:   '/usr/share/'
           template: |
             #!/bin/bash -ex
 
             /usr/bin/logger "prep: begin __key__"
 
             # Save the private key for accessing the cluster
-            mkdir /root/.ssh
             echo "__key__" > /root/.ssh/id_rsa
             chmod 600 /root/.ssh/id_rsa
 
-            ls -alR /home
+            cp /root/.ssh/id_rsa /home/cloud-user/.ssh/id_rsa
+            chmod 600 /home/cloud-user/.ssh/id_rsa
+            chown cloud-user /home/cloud-user/.ssh/id_rsa
 
             # Write and call the update script
             cat >>__store__/update.py <<EOF
@@ -125,6 +118,7 @@ resources:
             sfile = '__store__/servers.json'
             metadata = json.loads(sys.stdin.read())
             new_servers = json.loads(metadata.get('meta', {}).get('servers', '[]'))
+            new_server_names = json.loads(metadata.get('meta', {}).get('server_names', '[]'))
             if not new_servers:
                 sys.exit(1)  # bad metadata
             
@@ -135,17 +129,17 @@ resources:
             
             # record updated list of servers
             open(sfile, 'wt').write(json.dumps(new_servers))
-            
+
             # Re-create /etc/hosts
             f = open('/etc/hosts', 'wt')
-            f.write('127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4')
-            f.write('::1         localhost localhost.localdomain localhost6 localhost6.localdomain6')
+            f.write('127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4\n')
+            f.write('::1         localhost localhost.localdomain localhost6 localhost6.localdomain6\n')
             for i, server in enumerate(new_servers):
-                f.write('{0} __prefix__-{1} __prefix__-{1}.localdomain\n'.format(server,i,i))
+                f.write('{0} {1} {1}.localdomain\n'.format(server,new_server_names[i],new_server_names[i]))
             f.close()
             f = open('__store__/nodelist.pcs', 'wt')
             for i, server in enumerate(new_servers):
-                f.write('__prefix__-{0}@{1}'.format(i,server))
+                f.write('-{0}@{1}'.format(new_server_names[i],server))
             f.close()
             EOF
 
@@ -158,24 +152,14 @@ resources:
             #crontab <_crontab
             #rm _crontab
 
+            node_names=$(cat /etc/hosts | grep __prefix__ | awk '{print $3}' | tr '\n' ' ' )
+            node_ips=$(cat /etc/hosts | grep __prefix__ | awk '{print $1}' | tr '\n' ' ' )
+
             # Sync the hosts file
             for IP in ${node_names}; do
                 scp /etc/hosts cloud-user@${IP}:
                 ssh -t cloud-user@${IP} -- sudo cp ./hosts /etc/hosts
             done
-
-            # Potentially, if we ever support dynamic resizing, the short name may not be stable enough
-            # and we'll have to use IPs to create/update the cluster instead
-            node_names=$(cat /etc/hosts | grep __prefix__ | awk '{print $3}' | tr '\n' ' ' )
-            node_ips=$(cat /etc/hosts | grep __prefix__ | awk '{print $1}' | tr '\n' ' ' )
-
-            # Switch to CentOS so we can install some packages 
-            rm -rf /usr/share/doc/redhat-release
-            rm -rf /usr/share/redhat-release
-            rpm -Uvh --force http://mirror.centos.org/centos/7/os/x86_64/Packages/centos-release-7-2.1511.el7.centos.2.10.x86_64.rpm
-
-            # Notify success early during development phase
-            wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
 
             # Sync and install the packages
             yum --releasever=7 distro-sync -y
@@ -187,6 +171,7 @@ resources:
             
             # Construct and start the cluster
             pcs cluster setup --start --enable --name __prefix__  ${node_names}
+
 
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
