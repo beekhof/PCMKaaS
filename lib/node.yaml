@@ -8,11 +8,9 @@ parameters:
     label: Cluster node name
     description: Name of the cluster node
     default: node
-  offset:
-    type: number
-    label: Cluster node offset
-    description: Cluster node offset
-    default: 0
+  cluster_pass:
+    type: string
+    label: Cluster password
   image:
     type: string
     label: Image name or ID
@@ -50,7 +48,7 @@ resources:
     properties:
       handle: {get_resource: signal_handle}
       count: 1
-      timeout: 3300
+      timeout: 600
 
   floating_ip:
     type: floating_ip.yaml
@@ -76,23 +74,11 @@ resources:
             # appropriate curl PUT request using the "curl_cli" attribute
             # of the SwiftSignalHandle resource
             wc_notify:   { get_attr: ['signal_handle', 'curl_cli'] }
+            __clock__: 'pool.ntp.org'
+            __pass__: { get_param: cluster_pass }
           template: |
             #!/bin/sh -ex
 
-            /usr/bin/logger "cluster prep: begin"
-
-            # Switch to CentOS so we can install some packages 
-            rm -rf /usr/share/doc/redhat-release
-            rm -rf /usr/share/redhat-release
-            rpm -Uvh --force http://mirror.centos.org/centos/7/os/x86_64/Packages/centos-release-7-2.1511.el7.centos.2.10.x86_64.rpm
-
-            # Notify success early during development phase
-            wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
-                
-            # Sync and install the packages
-            yum --releasever=7 distro-sync -y
-            yum install -y pcs pacemaker corosync fence-agents-all resource-agents ntp
-            
             # set a password for hacluster user. password should be the same on all nodes
             echo __pass__ | passwd --stdin hacluster
 
@@ -100,16 +86,13 @@ resources:
             systemctl enable pcsd
             systemctl start pcsd
             
-            #systemctl disable firewalld
-            #systemctl stop firewalld
-            
             # The cluster shouldn't need NTP configured, but without it the
             # network goes bye-bye when using DHCP
             #
             # Must point to clock.redhat.com to work internally
             sed -i s/^server.*// /etc/ntp.conf
-            echo "server pool.ntp.org iburst" >> /etc/ntp.conf
-            echo pool.ntp.org > /etc/ntp/step-tickers
+            echo "server __clock__ iburst" >> /etc/ntp.conf
+            echo __clock__ > /etc/ntp/step-tickers
             
             #sync_to_hardware clock
             echo "SYNC_HWCLOCK=yes" >> /etc/sysconfig/ntpdate
@@ -120,8 +103,6 @@ resources:
             systemctl enable ntpd
             systemctl start ntpd
             
-            /usr/bin/logger "cluster prep: done"
-
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
   
