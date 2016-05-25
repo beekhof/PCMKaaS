@@ -7,6 +7,25 @@ neutron net-create cluster-test --shared --router:external=True --provider:netwo
 export FLOATING_IP_NET="192.0.2"
 neutron subnet-create --name ext-subnet --allocation-pool start=${FLOATING_IP_NET}.50,end=${FLOATING_IP_NET}.64 --disable-dhcp --gateway ${FLOATING_IP_NET}.1 cluster-test "${FLOATING_IP_NET}.0/24"
 
+cat<<EOF>>~/.bashrc
+export STACK="test"
+alias sl='heat stack-list'
+alias sd='heat stack-delete \$STACK'
+alias ss='heat resource-list -n5 --with-detail \$STACK'
+alias sc='heat stack-create \$STACK -f $PWD/cluster.yaml'
+alias nl='nova list'
+alias rs='heat resource-show'
+alias cl='nova console-log'
+EOF
+
+cat<<EOF>>~/.ssh/config
+Host $FLOATING_IP_NET.*
+  User centos
+  StrictHostkeyChecking no
+  UserKnownHostsFile /dev/null
+EOF
+
+
 if [ 0 = 1 ]; then
     # It should be possible to take the offical RH image,
     # define rh_subscription above and start using the
