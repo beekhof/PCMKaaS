@@ -62,7 +62,7 @@ resources:
     properties:
       handle: {get_resource: signal_handle}
       count: 1
-      timeout: 600
+      timeout: 2000
 
   floating_ip:
     type: floating_ip.yaml
@@ -96,17 +96,35 @@ resources:
             __key__:     { get_param: cluster_key }
             __store__:   '/usr/share/'
           template: |
-            #!/bin/bash -ex
+            Content-Type: multipart/mixed; boundary="===============3343034662225461311=="
+            MIME-Version: 1.0
+            
+            --===============3343034662225461311==
+            MIME-Version: 1.0
+            Content-Type: text/cloud-config; charset="us-ascii"
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="cloud.config"
+            
+            #cloud-config
+            # package_upgrade: true
+            packages:
+              - pcs
 
-            /usr/bin/logger "prep: begin __key__"
+            --===============3343034662225461311==
+            MIME-Version: 1.0
+            Content-Type: text/x-shellscript; charset="us-ascii"
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="cloud.sh"
+            
+            #!/bin/sh -ex
 
             # Save the private key for accessing the cluster
             echo "__key__" > /root/.ssh/id_rsa
             chmod 600 /root/.ssh/id_rsa
 
-            cp /root/.ssh/id_rsa /home/cloud-user/.ssh/id_rsa
-            chmod 600 /home/cloud-user/.ssh/id_rsa
-            chown cloud-user /home/cloud-user/.ssh/id_rsa
+            cp /root/.ssh/id_rsa /home/centos/.ssh/id_rsa
+            chmod 600 /home/centos/.ssh/id_rsa
+            chown centos /home/centos/.ssh/id_rsa
 
             # Write and call the update script
             cat >>__store__/update.py <<EOF
@@ -157,13 +175,9 @@ resources:
 
             # Sync the hosts file
             for IP in ${node_names}; do
-                scp /etc/hosts cloud-user@${IP}:
-                ssh -t cloud-user@${IP} -- sudo cp ./hosts /etc/hosts
+                scp /etc/hosts centos@${IP}:
+                ssh -t centos@${IP} -- sudo cp ./hosts /etc/hosts
             done
-
-            # Sync and install the packages
-            yum --releasever=7 distro-sync -y
-            yum install -y pcs pacemaker corosync fence-agents-all resource-agents ntp
 
             # autheticate nodes, requires all nodes to have pcsd up and running 
             # the -p option is used to give the password on command line and make it easier to script
@@ -172,13 +186,16 @@ resources:
             # Construct and start the cluster
             pcs cluster setup --start --enable --name __prefix__  ${node_names}
 
-
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
-  
+
+            find /var/lib/cloud/ -type f -print -exec cat \{\} \;
+            
             # Alternatively if operation fails a FAILURE with reason and data may be sent,
             # notify failure signal example below
             # wc_notify --data-binary '{"status": "FAILURE", "reason":"Operation failed due to xyz error", "data":"Script execution failed"}'
+          
+            --===============3343034662225461311==--
 
 outputs:
   name:

@@ -1,6 +1,11 @@
 heat_template_version: 2013-05-23
 
-description: Template that installs a small example web server.
+description: Template that installs a node ready to be added to a cluster.
+
+# It should be possible to take the offical RH image,
+# define rh_subscription above and start using the
+# 'packages' directive.  However this does not work
+# due to SSL and Cert issues.  For now use CentOS
 
 parameters:
   name:
@@ -48,7 +53,7 @@ resources:
     properties:
       handle: {get_resource: signal_handle}
       count: 1
-      timeout: 600
+      timeout: 2000
 
   floating_ip:
     type: floating_ip.yaml
@@ -77,38 +82,63 @@ resources:
             __clock__: 'pool.ntp.org'
             __pass__: { get_param: cluster_pass }
           template: |
+            Content-Type: multipart/mixed; boundary="===============3343034662225461311=="
+            MIME-Version: 1.0
+            
+            --===============3343034662225461311==
+            MIME-Version: 1.0
+            Content-Type: text/cloud-config; charset="us-ascii"
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="cloud.config"
+            
+            #cloud-config
+            # See http://cloudinit.readthedocs.io/en/latest/topics/examples.html
+            # Useful debugging options:
+            password: redhat
+            chpasswd: {expire: False}
+            ssh_pwauth: True
+
+            #  package_upgrade: true
+            packages:
+              - ntp
+              - pcs
+              - pacemaker
+              - resource-agents
+              - fence-agents-all
+
+            --===============3343034662225461311==
+            MIME-Version: 1.0
+            Content-Type: text/x-shellscript; charset="us-ascii"
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="cloud.sh"
+            
             #!/bin/sh -ex
 
-            # set a password for hacluster user. password should be the same on all nodes
+            # Start pcsd and set a password so that a peer can connect and configure us
             echo __pass__ | passwd --stdin hacluster
-
-            # enable pcsd
             systemctl enable pcsd
             systemctl start pcsd
             
             # The cluster shouldn't need NTP configured, but without it the
             # network goes bye-bye when using DHCP
-            #
-            # Must point to clock.redhat.com to work internally
-            sed -i s/^server.*// /etc/ntp.conf
-            echo "server __clock__ iburst" >> /etc/ntp.conf
-            echo __clock__ > /etc/ntp/step-tickers
-            
-            #sync_to_hardware clock
             echo "SYNC_HWCLOCK=yes" >> /etc/sysconfig/ntpdate
-            
+
             systemctl enable ntpdate
             systemctl start ntpdate
-            
+
             systemctl enable ntpd
             systemctl start ntpd
             
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
-  
+
+            # find /var/lib/cloud/ -type f -print -exec cat \{\} \;
+            
             # Alternatively if operation fails a FAILURE with reason and data may be sent,
             # notify failure signal example below
             # wc_notify --data-binary '{"status": "FAILURE", "reason":"Operation failed due to xyz error", "data":"Script execution failed"}'
+          
+            --===============3343034662225461311==--
 
 outputs:
   name:
