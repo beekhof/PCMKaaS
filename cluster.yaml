@@ -28,17 +28,12 @@ parameters:
     label: Cluster size
     description: Number of instances in cluster.
     default: 3
-  port_number:
-    type: number
-    label: Port number
-    description: Port number to proxy.
-    default: 22
 
 resources:
   uuid:
     type: OS::Heat::RandomString
     properties:
-      length: 4
+      length: 8
 
   cluster_key:
     type: lib/keypair.yaml
@@ -52,8 +47,8 @@ resources:
       rules:
         - protocol: icmp
         - protocol: tcp
-          port_range_min: { get_param: port_number }
-          port_range_max: { get_param: port_number }
+          port_range_min: 22
+          port_range_max: 22
         - protocol: tcp
           port_range_min: 2222
           port_range_max: 2224
