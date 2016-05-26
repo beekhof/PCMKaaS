@@ -80,7 +80,6 @@ resources:
             # appropriate curl PUT request using the "curl_cli" attribute
             # of the SwiftSignalHandle resource
             wc_notify:   { get_attr: ['signal_handle', 'curl_cli'] }
-            __clock__: 'pool.ntp.org'
             __pass__: { get_param: cluster_pass }
           template: |
             Content-Type: multipart/mixed; boundary="===============3343034662225461311=="
@@ -99,6 +98,7 @@ resources:
             chpasswd: {expire: False}
             ssh_pwauth: True
 
+            # Updating the system is a good idea, but it tales quite a long time
             #  package_upgrade: true
             packages:
               - ntp

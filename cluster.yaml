@@ -72,7 +72,6 @@ resources:
           name: { "Fn::Join": [ '-', [ 'cluster', { get_param: 'OS::stack_name' }, '%index%' ]] }
           image: { get_param: image }
           flavor: { get_param: flavor }
-          #key: { get_param: key }
           key: { get_attr: [cluster_key, name] }
           cluster_pass: { get_resource: uuid }
           private_network: { get_attr: [private_network, name] }
@@ -91,7 +90,7 @@ resources:
         public_network: { get_param: public_network }
         security_group: { get_resource: security_group }
         prefix: { "Fn::Join": [ '-', [ 'cluster', { get_param: 'OS::stack_name' }]] }
-        servers: { get_attr: [cluster, ip] }
+        server_ips: { get_attr: [cluster, ip] }
         server_names: { get_attr: [cluster, name] }
 
 outputs:
