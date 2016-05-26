@@ -115,6 +115,8 @@ resources:
             
             #!/bin/sh -ex
 
+            firewall-cmd --add-service=high-availability
+
             # Start pcsd and set a password so that a peer can connect and configure us
             echo __pass__ | passwd --stdin hacluster
             systemctl enable pcsd
