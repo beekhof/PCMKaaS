@@ -7,8 +7,7 @@ parameters:
   image:
     type: string
     label: Image name or ID
-    description: Image to be used for server. Please use an Ubuntu based image.
-    default: trusty-server-cloudimg-amd64
+    description: Image to be used for server
   flavor:
     type: string
     label: Flavor
@@ -45,7 +44,7 @@ parameters:
   cluster_pass:
     type: string
     label: Cluster password
-  servers:
+  server_ips:
     type: comma_delimited_list
     label: Servers
     description: Comma separated list of private IPs in the cluster.
@@ -80,7 +79,7 @@ resources:
       flavor: { get_param: flavor }
       key_name: { get_param: key }
       metadata:
-        servers: { get_param: servers }
+        server_ips: { get_param: server_ips }
         server_names: { get_param: server_names }
       networks:
         - port: { get_attr: [floating_ip, port] }
@@ -121,11 +120,18 @@ resources:
 
             # Save the private key for accessing the cluster
             echo "__key__" > /root/.ssh/id_rsa
-            chmod 600 /root/.ssh/id_rsa
+            cat >>/root/.ssh/config <<EOF
+            Host *.localdomain
+              User centos
+              StrictHostkeyChecking no
+              UserKnownHostsFile /dev/null
+            EOF
 
-            cp /root/.ssh/id_rsa /home/centos/.ssh/id_rsa
-            chmod 600 /home/centos/.ssh/id_rsa
-            chown centos /home/centos/.ssh/id_rsa
+            chmod 600 /root/.ssh/{id_rsa,config}
+            
+            cp -f /root/.ssh/{id_rsa,config} /home/centos/.ssh/
+            chmod 600 /home/centos/.ssh/{id_rsa,config}
+            chown centos /home/centos/.ssh/{id_rsa,config}
 
             # Write and call the update script
             cat >>__store__/update.py <<EOF
@@ -136,28 +142,28 @@ resources:
             # load server list from metadata
             sfile = '__store__/servers.json'
             metadata = json.loads(sys.stdin.read())
-            new_servers = json.loads(metadata.get('meta', {}).get('servers', '[]'))
+            new_server_ips = json.loads(metadata.get('meta', {}).get('server_ips', '[]'))
             new_server_names = json.loads(metadata.get('meta', {}).get('server_names', '[]'))
-            if not new_servers:
+            if not new_server_ips:
                 sys.exit(1)  # bad metadata
             
             # compare against known list of servers
-            current_servers = json.loads(open(sfile).read())
-            if current_servers == new_servers:
+            current_server_ips = json.loads(open(sfile).read())
+            if current_server_ips == new_server_ips:
                 sys.exit(0)  # no changes
             
             # record updated list of servers
-            open(sfile, 'wt').write(json.dumps(new_servers))
+            open(sfile, 'wt').write(json.dumps(new_server_ips))
 
             # Re-create /etc/hosts
             f = open('/etc/hosts', 'wt')
             f.write('127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4\n')
             f.write('::1         localhost localhost.localdomain localhost6 localhost6.localdomain6\n')
-            for i, server in enumerate(new_servers):
+            for i, server in enumerate(new_server_ips):
                 f.write('{0} {1} {1}.localdomain\n'.format(server,new_server_names[i],new_server_names[i]))
             f.close()
             f = open('__store__/nodelist.pcs', 'wt')
-            for i, server in enumerate(new_servers):
+            for i, server in enumerate(new_server_ips):
                 f.write('-{0}@{1}'.format(new_server_names[i],server))
             f.close()
             EOF
@@ -175,9 +181,9 @@ resources:
             node_ips=$(cat /etc/hosts | grep __prefix__ | awk '{print $1}' | tr '\n' ' ' )
 
             # Sync the hosts file
-            for IP in ${node_names}; do
-                scp /etc/hosts centos@${IP}:
-                ssh -t centos@${IP} -- sudo cp ./hosts /etc/hosts
+            for NODE in ${node_names}; do
+                scp /etc/hosts ${NODE}:
+                ssh -t ${NODE} -- sudo cp -f ./hosts /etc/hosts
             done
 
             # autheticate nodes, requires all nodes to have pcsd up and running 
@@ -190,7 +196,7 @@ resources:
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
 
-            find /var/lib/cloud/ -type f -print -exec cat \{\} \;
+            #find /var/lib/cloud/ -type f -print -exec cat \{\} \;
             
             # Alternatively if operation fails a FAILURE with reason and data may be sent,
             # notify failure signal example below
