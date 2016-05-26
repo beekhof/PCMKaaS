@@ -1,6 +1,7 @@
 heat_template_version: 2013-05-23
 
-description: Template that installs a small example web server.
+description: Template that installs a management node that configures
+             the supplied nodes into a cluster
 
 parameters:
   image:
@@ -164,7 +165,7 @@ resources:
             echo "[]" > __store__/servers.json
             curl -s http://169.254.169.254/openstack/latest/meta_data.json | python __store__/update.py
 
-            # add a cron job to monitor the metadata and update /etc/hosts
+            # Potentially we could add a cron job to monitor the metadata, update /etc/hosts and invoke pcs
             #crontab -l >_crontab || true
             #echo "* * * * * curl -s http://169.254.169.254/openstack/latest/meta_data.json | python __store__/update.py | /usr/bin/logger -t pcs_update" >>_crontab
             #crontab <_crontab

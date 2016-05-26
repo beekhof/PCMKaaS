@@ -2,10 +2,11 @@ heat_template_version: 2013-05-23
 
 description: Template that installs a node ready to be added to a cluster.
 
-# It should be possible to take the offical RH image,
-# define rh_subscription above and start using the
-# 'packages' directive.  However this does not work
-# due to SSL and Cert issues.  For now use CentOS
+# It should be possible to take the offical RH image, define
+# rh_subscription above and start using the 'packages' directive.
+# However this does not work due to SSL and Cert issues.
+#
+# For now use CentOS with cloud-init installed
 
 parameters:
   name:
@@ -90,7 +91,7 @@ resources:
             Content-Type: text/cloud-config; charset="us-ascii"
             Content-Transfer-Encoding: 7bit
             Content-Disposition: attachment; filename="cloud.config"
-            
+
             #cloud-config
             # See http://cloudinit.readthedocs.io/en/latest/topics/examples.html
             # Useful debugging options:
@@ -104,7 +105,7 @@ resources:
               - pcs
               - pacemaker
               - resource-agents
-              - fence-agents-all
+            #  - fence-agents-all
 
             --===============3343034662225461311==
             MIME-Version: 1.0
