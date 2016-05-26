@@ -71,8 +71,6 @@ resources:
     type: OS::Heat::ResourceGroup
     properties:
       count: { get_param: cluster_size }
-      removal_policies:
-        - resource_list: [0]
       resource_def:
         type: lib/node.yaml
         properties:
