@@ -97,6 +97,11 @@ resources:
             password: redhat
             chpasswd: {expire: False}
             ssh_pwauth: True
+            users:
+              - name:  cloud-user
+            #    shell: /bin/bash
+            #    groups: wheel, adm
+            #    sudo:  ALL=(ALL) NOPASSWD:ALL
 
             # Updating the system is a good idea, but it tales quite a long time
             #  package_upgrade: true
@@ -115,7 +120,12 @@ resources:
             
             #!/bin/sh -ex
 
-            firewall-cmd --add-service=high-availability
+            # Fix broken qemu/strstr()
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1269529#c9
+            touch /etc/sysconfig/64bit_strstr_via_64bit_strstr_sse2_unaligned
+
+            # Open up the relevant firewall ports
+            test ! -e /bin/firewall-cmd || /bin/firewall-cmd --add-service=high-availability
 
             # Start pcsd and set a password so that a peer can connect and configure us
             echo __pass__ | passwd --stdin hacluster
