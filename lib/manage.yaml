@@ -122,16 +122,16 @@ resources:
             echo "__key__" > /root/.ssh/id_rsa
             cat >>/root/.ssh/config <<EOF
             Host *.localdomain
-              User centos
+              User cloud-user
               StrictHostkeyChecking no
               UserKnownHostsFile /dev/null
             EOF
 
             chmod 600 /root/.ssh/{id_rsa,config}
             
-            cp -f /root/.ssh/{id_rsa,config} /home/centos/.ssh/
-            chmod 600 /home/centos/.ssh/{id_rsa,config}
-            chown centos /home/centos/.ssh/{id_rsa,config}
+            cp -f /root/.ssh/{id_rsa,config} /home/cloud-user/.ssh/
+            chmod 600 /home/cloud-user/.ssh/{id_rsa,config}
+            chown cloud-user /home/cloud-user/.ssh/{id_rsa,config}
 
             # Write and call the update script
             cat >>__store__/update.py <<EOF
@@ -183,7 +183,7 @@ resources:
             # Sync the hosts file
             for NODE in ${node_names}; do
                 scp /etc/hosts ${NODE}:
-                ssh -t ${NODE} -- sudo cp -f ./hosts /etc/hosts
+                ssh -t -t ${NODE} -- sudo cp -f ./hosts /etc/hosts
             done
 
             # autheticate nodes, requires all nodes to have pcsd up and running 
