@@ -12,7 +12,7 @@ if [ $? = 1 ]; then
 
     neutron net-create cluster-external --shared --router:external=True --provider:network_type flat --provider:physical_network datacentre
 
-    neutron subnet-create --name ext-subnet --allocation-pool start=${FLOATING_IP_NET}.50,end=${FLOATING_IP_NET}.64 --disable-dhcp --gateway ${FLOATING_IP_NET}.1 cluster-test "${FLOATING_IP_NET}.0/24"
+    neutron subnet-create --name ext-subnet --allocation-pool start=${FLOATING_IP_NET}.50,end=${FLOATING_IP_NET}.64 --disable-dhcp --gateway ${FLOATING_IP_NET}.1 cluster-external "${FLOATING_IP_NET}.0/24"
 
     cat<<EOF>>~/.bashrc
 export STACK="test"

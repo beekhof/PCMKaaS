@@ -8,6 +8,11 @@ parameters:
     type: string
     label: Image name or ID
     description: Image to be used for server
+  image_user:
+    type: string
+    label: Username
+    description: Name of the user that is permitted to connect to the image
+    default: cloud-user
   flavor:
     type: string
     label: Flavor
@@ -55,7 +60,7 @@ parameters:
 
 resources:
   signal_handle:
-    type: "OS::Heat::SwiftSignalHandle"
+    type: OS::Heat::SwiftSignalHandle
 
   wait_on_server:
     type: OS::Heat::SwiftSignal
@@ -92,6 +97,7 @@ resources:
             # of the SwiftSignalHandle resource
             wc_notify:   { get_attr: ['signal_handle', 'curl_cli'] }
             __pass__:    { get_param: cluster_pass }
+            __user__:    { get_param: image_user }
             __prefix__:  { get_param: prefix }
             __key__:     { get_param: cluster_key }
             __store__:   '/usr/share/'
@@ -122,16 +128,17 @@ resources:
             echo "__key__" > /root/.ssh/id_rsa
             cat >>/root/.ssh/config <<EOF
             Host *.localdomain
-              User cloud-user
+              User __user__
               StrictHostkeyChecking no
               UserKnownHostsFile /dev/null
             EOF
 
             chmod 600 /root/.ssh/{id_rsa,config}
-            
-            cp -f /root/.ssh/{id_rsa,config} /home/cloud-user/.ssh/
-            chmod 600 /home/cloud-user/.ssh/{id_rsa,config}
-            chown cloud-user /home/cloud-user/.ssh/{id_rsa,config}
+
+            # Allow the image_user to connect to the cluster too
+            cp -f /root/.ssh/{id_rsa,config} /home/__user__/.ssh/
+            chmod 600 /home/__user__/.ssh/{id_rsa,config}
+            chown __user__ /home/__user__/.ssh/{id_rsa,config}
 
             # Write and call the update script
             cat >>__store__/update.py <<EOF
