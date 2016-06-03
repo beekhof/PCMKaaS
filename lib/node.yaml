@@ -2,12 +2,6 @@ heat_template_version: 2013-05-23
 
 description: Template that installs a node ready to be added to a cluster.
 
-# It should be possible to take the offical RH image, define
-# rh_subscription above and start using the 'packages' directive.
-# However this does not work due to SSL and Cert issues.
-#
-# For now use CentOS with cloud-init installed
-
 parameters:
   name:
     type: string
@@ -97,11 +91,6 @@ resources:
             password: redhat
             chpasswd: {expire: False}
             ssh_pwauth: True
-            users:
-              - name:  cloud-user
-            #    shell: /bin/bash
-            #    groups: wheel, adm
-            #    sudo:  ALL=(ALL) NOPASSWD:ALL
 
             # Updating the system is a good idea, but it tales quite a long time
             #  package_upgrade: true
@@ -110,7 +99,8 @@ resources:
               - pcs
               - pacemaker
               - resource-agents
-            #  - fence-agents-all
+              - fence-agents-all
+              - python-novaclient
 
             --===============3343034662225461311==
             MIME-Version: 1.0
@@ -132,6 +122,10 @@ resources:
             systemctl enable pcsd
             systemctl start pcsd
             
+            # Until the fencing agent is in a shipping package
+            wget -O/sbin/fence_nova http://people.redhat.com/abeekhof/fence_nova
+            chmod a+x /sbin/fence_nova
+
             # The cluster shouldn't need NTP configured, but without it the
             # network goes bye-bye when using DHCP
             echo "SYNC_HWCLOCK=yes" >> /etc/sysconfig/ntpdate
@@ -141,8 +135,8 @@ resources:
 
             systemctl enable ntpd
             systemctl start ntpd
-            
-            # Assuming long running operation completed successfully, notify success signal
+
+            # Long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
 
             # find /var/lib/cloud/ -type f -print -exec cat \{\} \;

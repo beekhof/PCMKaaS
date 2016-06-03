@@ -2,14 +2,16 @@ image_version=7.2
 image_date=20160302
 image_target=rhel-ha-guest-${image_version}.qcow2
 base="$PWD/$(dirname $0)"
+export FLOATING_IP_NET="192.0.2"
 
 . ~/overcloudrc
-if [ 0 = 1 ]; then
+
+grep STACK_OPTS ~/.bashrc
+if [ $? = 1 ]; then
     nova keypair-add overcloud --pub-key ~/.ssh/id_rsa.pub
 
-    neutron net-create cluster-test --shared --router:external=True --provider:network_type flat --provider:physical_network datacentre
+    neutron net-create cluster-external --shared --router:external=True --provider:network_type flat --provider:physical_network datacentre
 
-    export FLOATING_IP_NET="192.0.2"
     neutron subnet-create --name ext-subnet --allocation-pool start=${FLOATING_IP_NET}.50,end=${FLOATING_IP_NET}.64 --disable-dhcp --gateway ${FLOATING_IP_NET}.1 cluster-test "${FLOATING_IP_NET}.0/24"
 
     cat<<EOF>>~/.bashrc
@@ -34,11 +36,15 @@ fi
 
 . ~/.bashrc
 
+if [ "x$1" = "x-f" ]; then
+    rm -f ${image_target} 
+fi
+
 if [ ! -e rhel-guest-image-${image_version}-${image_date}.0.x86_64.qcow2 ]; then
     wget http://download.eng.bos.redhat.com/brewroot/packages/rhel-guest-image/${image_version}/${image_date}.0/images/rhel-guest-image-${image_version}-${image_date}.0.x86_64.qcow2
 fi
 
-if [ 1 = 1 ]; then
+if [ 0 = 1 ]; then
     # It should be possible to take the offical RH image,
     # define rh_subscription above and start using the
     # 'packages' directive.  However this does not work
@@ -78,7 +84,7 @@ elif [ -e rhn.pass -a -e rhel-guest-image-${image_version}-${image_date}.0.x86_6
     echo "Adding HA-Addon packages to RHEL guest"
     rsync -av --progress rhel-guest-image-${image_version}-${image_date}.0.x86_64.qcow2 ${image_target}
 
-    # We need the yet-to-be-released RHEL 7.3 version though, so grab an unofficial rebuild
+    # We need the yet-to-be-released RHEL 7.3 version of libguestfs, grab an unofficial rebuild
     cat <<EOF>guestfs.repo
 [libguestfs]
 name=GuestFS Tools
@@ -89,12 +95,16 @@ EOF
     sudo sudo yum update -y libguestfs-tools-c
     
     virt-customize  -v -a ${image_target} \
-		    --sm-credentials 'rhn-engineering-abeekhof:file:rhn.pass' \
-		    --sm-register --sm-attach auto \
-		    --install "pcs,pacemaker,corosync,fence-agents-all,resource-agents,ntp,gcc" \
-		    --sm-unregister \
-		    --selinux-relabel
+		    --sm-credentials 'rhn-engineering-abeekhof:file:rhn.pass' --sm-register --sm-attach auto \
+		    --install "pcs,pacemaker,corosync,fence-agents-all,resource-agents,ntp" 
 
+    # Openstack repos do not auto attach
+    cat <<EOF>nova.sh
+yum --enablerepo rhel-7-server-openstack-8-tools-rpms install -y python-novaclient
+EOF
+    virt-customize  -v -a ${image_target} --run nova.sh
+    virt-customize  -v -a ${image_target} --sm-unregister --selinux-relabel
+    
     openstack image create --container-format bare --disk-format qcow2 --public --file rhel-ha-guest-${image_version}.qcow2 ha-guest
 
 else
