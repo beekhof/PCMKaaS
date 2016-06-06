@@ -123,7 +123,7 @@ resources:
             systemctl start pcsd
             
             # Until the fencing agent is in a shipping package
-            wget -O/sbin/fence_nova http://people.redhat.com/abeekhof/fence_nova
+            curl http://people.redhat.com/abeekhof/fence_nova > /sbin/fence_nova 
             chmod a+x /sbin/fence_nova
 
             # The cluster shouldn't need NTP configured, but without it the
