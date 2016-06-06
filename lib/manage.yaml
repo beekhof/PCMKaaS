@@ -198,8 +198,14 @@ resources:
             pcs cluster auth $node_names -u hacluster -p __pass__
             
             # Construct and start the cluster
+            # For now it will report failed because we are not one of the cluster nodes
+            set +e
             pcs cluster setup --start --enable --name __prefix__  ${node_names}
+            set -e
 
+            # Configure fencing
+            ssh -t -t __prefix__-0 -- sudo pcs stonith create killer fence_nova login=admin tenant-name=admin domain=localdomain auth-url=http://192.0.2.6:5000/v2.0 passwd=b64FZzF4gHz73jHFB9hFx7ysG
+            
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
 
