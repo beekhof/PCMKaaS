@@ -3,6 +3,12 @@ heat_template_version: 2013-05-23
 description: Template that assigns a floating IP address to a server.
 
 parameters:
+  name:
+    type: string
+    label: Port name
+    description: Name for the port to create
+    default: vip
+
   security_group:
     type: string
     description: Public network security group
@@ -23,7 +29,9 @@ resources:
   port:
     type: OS::Neutron::Port
     properties:
+      name: { get_param: 'name' }
       network: { get_param: private_network }
+      #port_security_enabled: False
       security_groups:
         - { get_param: security_group }
       replacement_policy: AUTO
@@ -46,3 +54,8 @@ outputs:
   port:
     description: The port connecting the instance to the world
     value: { get_resource: port }
+  fixed_ip:
+    description: The port connecting the instance to the world
+    value: { get_attr: [floating_ip, fixed_ip_address] }
+
+    

@@ -38,6 +38,7 @@ resources:
     type: OS::Neutron::Net
     properties:
       name: { "Fn::Join": [ '-', [ 'private-net', { get_param: suffix } ]] }
+      #port_security_enabled: False
 
   private_subnet:
     type: OS::Neutron::Subnet

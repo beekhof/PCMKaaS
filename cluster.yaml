@@ -35,6 +35,11 @@ parameters:
     label: Cluster size
     description: Number of instances in cluster.
     default: 3
+  pool_size:
+    type: number
+    label: Pool size
+    description: Number of VIPs to create
+    default: 3
 
 resources:
   uuid:
@@ -69,6 +74,18 @@ resources:
       public_network: { get_param: public_network }
       suffix: { get_param: 'OS::stack_name' }
 
+  vips:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: { get_param: pool_size }
+      resource_def:
+        type: lib/floating_ip.yaml
+        properties:
+          name: { "Fn::Join": [ '-', [ 'vip', { get_param: 'OS::stack_name' }, '%index%' ]] }
+          private_network: { get_attr: [private_network, name] }
+          public_network: { get_param: public_network }
+          security_group: { get_resource: security_group }
+          
   cluster:
     type: OS::Heat::ResourceGroup
     properties:
@@ -100,11 +117,15 @@ resources:
         prefix: { "Fn::Join": [ '-', [ 'cluster', { get_param: 'OS::stack_name' }]] }
         server_ips: { get_attr: [cluster, ip] }
         server_names: { get_attr: [cluster, name] }
+        cluster_ips: { get_attr: [vips, fixed_ip] }
 
 outputs:
   ip:
     description: The public IP address to access the server.
     value: { get_attr: [management, public_ip] }
+  vip:
+    description: The addresses to access services managed by the cluster.
+    value: { get_attr: [vips, fixed_ip] }
   key:
     description: The internal cluster password.
     value: { get_resource: uuid }

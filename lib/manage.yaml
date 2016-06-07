@@ -51,12 +51,16 @@ parameters:
     label: Cluster password
   server_ips:
     type: comma_delimited_list
-    label: Servers
+    label: Server IPs
     description: Comma separated list of private IPs in the cluster.
   server_names:
     type: comma_delimited_list
-    label: Servers
+    label: Server Names
     description: Comma separated list of cluster server names.
+  cluster_ips:
+    type: comma_delimited_list
+    label: Cluster IPs
+    description: Comma separated list of IPs used to access cluster services
 
 resources:
   signal_handle:
@@ -75,6 +79,7 @@ resources:
       public_network: { get_param: public_network }
       private_network: { get_param: private_network }
       security_group: { get_param: security_group }
+      name: { "Fn::Join": [ '-', [ 'vip', { get_param: prefix }, 'manage' ]] }
 
   management_node:
     type: OS::Nova::Server
@@ -86,6 +91,7 @@ resources:
       metadata:
         server_ips: { get_param: server_ips }
         server_names: { get_param: server_names }
+        cluster_ips: { get_param: cluster_ips }
       networks:
         - port: { get_attr: [floating_ip, port] }
       user_data_format: RAW
@@ -130,7 +136,6 @@ resources:
             Host *.localdomain
               User __user__
               StrictHostkeyChecking no
-              UserKnownHostsFile /dev/null
             EOF
 
             chmod 600 /root/.ssh/{id_rsa,config}
@@ -148,7 +153,9 @@ resources:
             
             # load server list from metadata
             sfile = '__store__/servers.json'
+            vfile = '__store__/vips.json'
             metadata = json.loads(sys.stdin.read())
+            new_cluster_ips = json.loads(metadata.get('meta', {}).get('cluster_ips', '[]'))
             new_server_ips = json.loads(metadata.get('meta', {}).get('server_ips', '[]'))
             new_server_names = json.loads(metadata.get('meta', {}).get('server_names', '[]'))
             if not new_server_ips:
@@ -162,6 +169,12 @@ resources:
             # record updated list of servers
             open(sfile, 'wt').write(json.dumps(new_server_ips))
 
+            # record updated list of VIPs
+            f = open('__store__/pcs.vip-list.txt', 'wt')
+            for i, server in enumerate(new_cluster_ips):
+                f.write('{0}\t{1}\n'.format(i+1, server))
+            f.close()
+            
             # Re-create /etc/hosts
             f = open('/etc/hosts', 'wt')
             f.write('127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4\n')
@@ -169,7 +182,7 @@ resources:
             for i, server in enumerate(new_server_ips):
                 f.write('{0} {1} {1}.localdomain\n'.format(server,new_server_names[i],new_server_names[i]))
             f.close()
-            f = open('__store__/nodelist.pcs', 'wt')
+            f = open('__store__/pcs.node-list.txt', 'wt')
             for i, server in enumerate(new_server_ips):
                 f.write('-{0}@{1}'.format(new_server_names[i],server))
             f.close()
@@ -186,11 +199,13 @@ resources:
 
             node_names=$(cat /etc/hosts | grep __prefix__ | awk '{print $3}' | tr '\n' ' ' )
             node_ips=$(cat /etc/hosts | grep __prefix__ | awk '{print $1}' | tr '\n' ' ' )
+            one_node=$(echo $node_names | awk '{print $1}')
+            resource_ips=$(cat __store__/pcs.vip-list.txt | tr '\t' ',' )
 
             # Sync the hosts file
             for NODE in ${node_names}; do
                 scp /etc/hosts ${NODE}:
-                ssh -t -t ${NODE} -- sudo cp -f ./hosts /etc/hosts
+                ssh -t -t -o BatchMode=yes ${NODE} -- sudo cp -f ./hosts /etc/hosts
             done
 
             # autheticate nodes, requires all nodes to have pcsd up and running 
@@ -204,8 +219,14 @@ resources:
             set -e
 
             # Configure fencing
-            ssh -t -t __prefix__-0 -- sudo pcs stonith create killer fence_nova login=admin tenant-name=admin domain=localdomain auth-url=http://192.0.2.6:5000/v2.0 passwd=b64FZzF4gHz73jHFB9hFx7ysG
-            
+            ssh -t -t ${one_node} -- sudo pcs stonith create killer fence_nova login=admin tenant-name=admin domain=localdomain auth-url=http://192.0.2.6:5000/v2.0 passwd=b64FZzF4gHz73jHFB9hFx7ysG
+
+            # Configure service VIPs
+            for IP in ${resource_ips}; do
+                IFS=","; set -- $IP;
+                ssh -t -t ${one_node} -- sudo pcs resource create vip-${1} IPaddr2 ip=${2} cidr_netmask=32
+            done
+
             # Assuming long running operation completed successfully, notify success signal
             wc_notify --data-binary '{"status": "SUCCESS", "data": "Script execution succeeded"}'
 

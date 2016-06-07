@@ -53,6 +53,7 @@ resources:
   floating_ip:
     type: floating_ip.yaml
     properties:
+      name: { get_param: name }
       public_network: { get_param: public_network }
       private_network: { get_param: private_network }
       security_group: { get_param: security_group }
