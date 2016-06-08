@@ -101,6 +101,7 @@ resources:
           private_network: { get_attr: [private_network, name] }
           public_network: { get_param: public_network }
           security_group: { get_resource: security_group }
+          vip_pool: { get_attr: [vips, fixed_ip] }
 
   management:
       type: lib/manage.yaml

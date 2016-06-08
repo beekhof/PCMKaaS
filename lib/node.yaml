@@ -35,13 +35,18 @@ parameters:
     label: Private network name or ID
     description: Network to attach server to.
     default: private
+  vip_pool:
+    type: comma_delimited_list
+    description: Pool of VIPs 
+    label: VIP Pool
+    default: []
   security_group:
     type: string
     description: Public network security group
 
 resources:
   signal_handle:
-    type: "OS::Heat::SwiftSignalHandle"
+    type: OS::Heat::SwiftSignalHandle
 
   wait_on_server:
     type: OS::Heat::SwiftSignal
@@ -57,6 +62,7 @@ resources:
       public_network: { get_param: public_network }
       private_network: { get_param: private_network }
       security_group: { get_param: security_group }
+      vips: { get_param: vip_pool }
 
   cluster_instance:
     type: OS::Nova::Server

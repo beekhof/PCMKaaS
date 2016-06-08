@@ -1,4 +1,4 @@
-heat_template_version: 2013-05-23
+heat_template_version: 2015-04-30
 
 description: Template that assigns a floating IP address to a server.
 
@@ -12,6 +12,12 @@ parameters:
   security_group:
     type: string
     description: Public network security group
+
+  vips:
+    type: comma_delimited_list
+    description: Pool of VIPs 
+    label: VIP Pool
+    default: ""
 
   public_network:
     type: string
@@ -31,10 +37,15 @@ resources:
     properties:
       name: { get_param: 'name' }
       network: { get_param: private_network }
-      #port_security_enabled: False
       security_groups:
         - { get_param: security_group }
       replacement_policy: AUTO
+      allowed_address_pairs:
+        repeat:
+          for_each:
+            <%vip%>: { get_param: vips }
+          template:
+            ip_address: <%vip%>
 
   floating_ip:
     type: OS::Neutron::FloatingIP
